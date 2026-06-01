@@ -1,14 +1,27 @@
-UV = "uv.exe" if ocx.platform()["os"] == "windows" else "uv"
+# tests/smoke.star — stable across upstream uv releases.
+# Asserts machine-stable contracts only: exit codes, version digits,
+# subcommand presence. Never asserts help prose or banner text.
 
-r_version = ocx.run(UV, "--version")
-expect.ok(r_version)
-expect.eq(r_version.exit_code, 0)
-expect.contains(r_version.stdout, "uv ")
+UV = "uv.exe" if ocx.target_platform.os == ocx.os.Windows else "uv"
+UVX = "uvx.exe" if ocx.target_platform.os == ocx.os.Windows else "uvx"
 
-r_help = ocx.run(UV, "--help")
-expect.eq(r_help.exit_code, 0)
-expect.contains(r_help.stdout, "extremely fast Python package")
+# Tier 1 + 2: liveness + version shape.
+r = ocx.run(UV, "--version")
+expect.ok(r)
+expect.matches(r.stdout, r"\d+\.\d+\.\d+")
 
-r_cache = ocx.run(UV, "cache", "dir")
-expect.eq(r_cache.exit_code, 0)
-expect.true(len(r_cache.stdout) > 0)
+# Tier 1: the second published binary (uvx) also resolves on the composed PATH.
+expect.ok(ocx.run(UVX, "--version"))
+
+# Tier 3: functional behavior on a real code path (not a --help short-circuit).
+# `uv cache dir` resolves and prints a cache path — exercises real init.
+r = ocx.run(UV, "cache", "dir")
+expect.ok(r)
+expect.true(len(r.stdout) > 0)
+
+# Tier 3: subcommand-presence probes — prove the surfaces EXIST via exit code,
+# without scraping help descriptions (which upstream rewords freely).
+expect.eq(ocx.run(UV, "help", "pip").exit_code, 0)
+expect.eq(ocx.run(UV, "help", "venv").exit_code, 0)
+
+# metadata.json declares PATH only — no Tier 4 env-var wiring to test.
